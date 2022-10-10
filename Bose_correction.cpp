@@ -1,113 +1,115 @@
-#include <iostream> 
 #include <cmath>
-#include <string>
-#include <vector>
-#include <sstream>
 #include <fstream>
-#include <typeinfo>
-/*
-    Convention
-    Class_Names
-    functionName
-    variable_name
-    CONSTANT_NAMES
-*/
-using std::cout;
+#include <iostream> 
+#include <sstream>
+#include <vector>
+
 using std::cin;
+using std::cout;
 using std::endl;
 using std::string;
+using std::vector;
 
 //Raman Data will be handled using this structure
-struct datapoint {double wavenumber; double scat_intensity;};
+struct Data_Point {double wavenumber; double scat_intensity;};
 
 //Declare functions
-int playMenu();
-int checkFileNColumns (string filename, int n);
-std::vector<datapoint> readFileintoDataPoints (string filename);
-double calcScalingBE(double wavenumber, double t_kelvin);
-std::vector<datapoint> scalebyBE(std::vector<datapoint> dv, double t_kelvin);
-void printDataVector(std::vector<datapoint> dv);
-void saveDVectorintoFile (std::vector<datapoint> dv, string filename);
-
+vector<Data_Point> readFromFile(string filename); 
+double calcScaleFactor(double wavenumber, double t_kelvin);
+void scaleByBE(std::vector<Data_Point> &dv, double t_kelvin);
+void printDataVector(std::vector<Data_Point> dv);
+void writeToFile (std::vector<Data_Point> &dv, string filename); 
 
 int main(int argc, char** argv)
 {
-
-    //Open the file with the name input by the user in command line. Alert user if unable to open.
-    string file_name = argv[1];
-    std::ifstream ifile (file_name);
-    if (ifile.is_open()){ cout << "Opening Raman spectrum file: " << file_name << "\n";}
-    else {
-        cout << "Unable to open Raman spectrum file: " << file_name << "\n Terminating."; 
-        return 0;
+    //Check command line had: input filename, temperature, and output filename.
+    bool validCommandLine = true;
+    if (argc != 4) {
+        cout << "Syntax: a.exe <Input_Filename> <Temperature> <Output_Filename>" << endl;
+        return 1;
     }
+
+    string input_filename = argv[1];
+    double temperature = std::stod(argv[2]);
+    if (temperature <= 0) {
+        cout << "Terminating. Temperature must be above zero." << endl;
+        return 1;
+    }
+    string output_filename = argv[3];
     
-    //Read the Raman spectrum from the file into a vector of data points
-    std::vector<datapoint> data_vector;   
-    if(checkFileNColumns(file_name, 2) != 0){cout << "Improper input file. Terminating.\n"; return 0;}
-    data_vector = readFileintoDataPoints ("Bi25FeO39-Powder.txt");
+    //Read/Check the Raman spectrum from the file -> Vector of data points.
+    std::vector<Data_Point> data_vector;
+    data_vector = readFromFile (input_filename); 
+    if (data_vector.empty()) {
+        cout << "Terminating. Input data was invalid." << endl;
+        return 1;
+    }
  
     //Scale the Raman scattering intensity by a factor related to the Bose-Einstein distribution
-    //in order to obtain the imaginary part of the Raman susceptibility 
-    data_vector = scalebyBE(data_vector, std::stod(argv[2]));
+    //in order to obtain the imaginary part of the Raman susceptibility.
+    scaleByBE(data_vector, temperature);
     
-    //Save scaled Raman spectrum to filename specified in command line
-    saveDVectorintoFile (data_vector, argv[3]);
-
+    //Save scaled Raman spectrum to filename specified in command line.
+    writeToFile (data_vector, output_filename);
 
     return 0;
 }
 
-int checkFileNColumns (string filename, int n){
-    //Purpose: Reads the spectrum file and checks it has two valid columns
 
-    //Declare variables
-    std::ifstream ifile (filename); //File object
-    string line; //A string that holds the information for each line
+//Purpose: Reads a space or tab delimited file and converts it to a vector of Data_Point.
+//The file should have two columns: 1) Wavenumbers, 2) Raman intensity.
+vector<Data_Point> readFromFile(string filename) {
+    std::vector<Data_Point> data_vector = {}; //Return variable
 
-    int m = 0; //Count the number of rows
-    int e = 0; //Count the number of rows with improper columns
-    while (std::getline(ifile, line)) //Get each line from file. Then, while you have lines...
-    {
-        m++;
-        std::stringstream iss(line);
-        string sinput;
-        int s = 0; //Count columns
-        while(iss >> sinput){
-            s++; //Count each column
-        }
-        if (s != 2){
-            cout << "In row " << m << " the number of columns were not equal to the desired " << n << " columns.\n";
-            e++;
-        }
+    //Open filestream, check if it opens
+    std::ifstream ifile (filename); 
+    if (ifile.is_open()) { 
+        cout << "Opening Raman spectrum file: " << filename << "\n";
     }
+    else {
+        cout << "Unable to open Raman spectrum file: " << filename << "\n"; 
+        return data_vector;
+    }
+
+    string line; //A string that holds the information for each line
+    Data_Point dp;
+    bool successful_read = true;
+    int r = 0; //Count rows in case you need to output an error and specify the row
+    
+    //Get each line from file. Make sure there are only two valid numbers in each line.
+    while (std::getline(ifile, line)) {
+        std::stringstream iss(line);
+        iss >> dp.wavenumber;  //Test what happens if it gets a word instead of a number
+        iss >> dp.scat_intensity;
+        
+        if (iss.fail()) {
+            successful_read = false; 
+            cout << "Bad line read. Row number: " << r + 1 << endl; 
+            break;
+        }
+        if (!iss.eof()) {
+            successful_read = false; 
+            cout << "Too many columns. Row number: " << r + 1 << endl; 
+            break;
+        }
+
+        r++;
+        data_vector.push_back(dp);
+    }
+    
+    //If a read was not successful, the return vector will be empty.
+    if (!successful_read) {
+        data_vector.clear();
+    }
+    
     ifile.close();
-    cout << "Number of rows: " << m << "\n";
-
-    return e; 
-}
-
-std::vector<datapoint> readFileintoDataPoints (string filename){
-    //Purpose: Reads a file and converts it to a vector of datapoints
-
-    //Declare variables
-    std::ifstream ifile (filename); //File object
-    string line; //A string that holds the information for each line
-    datapoint new_dp;
-    std::vector<datapoint> data_vector;
-
-    while (std::getline(ifile, line)) //Get each line from file. Then, while you have lines...
-    {
-        std::stringstream iss(line);
-        iss >> new_dp.wavenumber;
-        iss >> new_dp.scat_intensity;
-        data_vector.push_back(new_dp);
-    }
     return data_vector;
 }
 
-void printDataVector(std::vector<datapoint> dv){
-    datapoint dp;
+
+//Purpose: Console output a vector of Data_Point
+void printDataVector(std::vector<Data_Point> dv){
+    Data_Point dp;
     int rows = dv.size();
     for (int i = 0; i < rows; i++){
         cout << dv[i].wavenumber << "\t" << dv[i].scat_intensity << "\n";
@@ -115,68 +117,63 @@ void printDataVector(std::vector<datapoint> dv){
     return;
 }
 
-double calcScalingBE(double wavenumber, double t_kelvin)
-{
-    /*
-    wavenumber must have units of inverse cm
-    temperature must be in kelvin
-    http://dx.doi.org/10.1088/0953-8984/15/19/332
-    https://digitalcommons.unl.edu/cgi/viewcontent.cgi?article=1263&context=chemfacpub
-    */
-    //const int: Read-only variable
-    const double HC_KB = 1.4387;  //hc/kb = 1.98644x10(-23) J*cm / 1.38065x10(-23) J/K
 
-    // Photon energy scaled by thermal energy: 
-    // hw/kbT =(h*c/lambda)/(kb*T) = (h*c/kb)*(1/lambda)/T
-    double pe_te = HC_KB*wavenumber/t_kelvin;
+//Purpose: Calculate the scaling factor, from the Bose Einstein distribution,
+//necessary to convert from Raman intensity to the imaginary (off-phase) part of the Raman 
+//susceptibility. Wavenumber is the frequency in inverse cm, and temperature is in kelvin. 
+double calcScaleFactor(double wavenumber, double temperature) {
+    //Further information on Bose Einstein scaling can be found in:
+    //http://dx.doi.org/10.1088/0953-8984/15/19/332
+    //https://digitalcommons.unl.edu/cgi/viewcontent.cgi?article=1263&context=chemfacpub
+
+    //Photon energy scaled by thermal energy: (h*c/lambda)/(kb*T)
+    //lambda is the wavelength. Wavenumber = 1/lambda.
+    //T is temperature in kelvin.
+    //h is Planck constant, c is speed of light. h*c = 1.98644x10(-23) J*cm.
+    //kb is the Boltzman constant. kb = 1.38065x10(-23) J/K.
+    //(h*c/lambda)/(kb*T) = (h*c/kb)*(wavenumber)/T.
+    const double HC_KB = 1.4387; // h*c/kb 
+    double exponent = HC_KB * wavenumber / temperature;
     
-    //Bose einstein distribution: n(w) = 1/( e(hw/kbT) - 1)
-    double be = 1.0/(exp(pe_te) -1.0);
+    //Bose einstein distribution: n(w) = 1/( exp[(h*c/lambda)/(kb*T)] - 1)
+    double be = 1.0 / (exp(exponent) - 1.0);
     
     //Scaling of the raman scattering cross section to get the imaginary part of the Raman susceptibility
-    double scaling = 1.0/(be+1.0);
+    double scaling = 1.0 / (be + 1.0);
     
-    return(scaling);
+    return scaling;
 }
 
-std::vector<datapoint> scalebyBE(std::vector<datapoint> dv, double t_kelvin){
-    for (int i = 0; i < dv.size(); i++){
-        dv[i].scat_intensity = calcScalingBE(dv[i].wavenumber, t_kelvin)*dv[i].scat_intensity;
+
+//Purpose: Scale the raman intensity in each data point by a factor calculated
+//from the Bose Einstein distribution. Must input a vector of Data_Point and 
+//temperature as kelvin. The original vector is modified in place. 
+void scaleByBE(std::vector<Data_Point> &dv, double t_kelvin){
+    for (vector<Data_Point>::iterator it = dv.begin(); it != dv.end(); ++it) {
+        (*it).scat_intensity *= calcScaleFactor((*it).wavenumber, t_kelvin);
     }
-    return(dv);
 }
 
-void saveDVectorintoFile (std::vector<datapoint> dv, string filename){
-    //Save a vector of objects with the datapoint structure into a file
+
+//Write a vector of Data_Point to desired filename.
+void writeToFile (vector<Data_Point> &dv, string filename){
 
     std::ofstream ofile (filename); //Open new file or rewrite over previous one.
-    if(ofile.is_open()){cout << "Saving results into : " << filename << "\n";}
-    else{cout << "Could not open : " << filename << "\n";}
-    datapoint dp;
-    int rows = dv.size();
-    for (int i = 0; i < rows; i++){
-        ofile << dv[i].wavenumber << "\t" << dv[i].scat_intensity << "\n";
+    
+    //Can you open the file?
+    if (ofile.is_open()) {
+        cout << "Saving results into : " << filename << "\n";
     }
+    else {
+        cout << "Could not open : " << filename << ". No data has been written." << endl;
+    }
+
+    for (vector<Data_Point>::iterator it = dv.begin(); it != dv.end(); ++it) {
+        ofile << (*it).wavenumber << "\t" << (*it).scat_intensity << "\n";
+    }
+    
+    //Close the file
+    ofile.close();
+
     return;
-}
-
-int playMenu(){
-    int choice;
-    cout << "Raman shift units?" << std::endl;
-    cout << "0. Wavenumbers (cm-1) \n1. eV" << std::endl;
-    cin >> choice;
-    //Confirm the choice to the user
-    switch(choice){
-        case 0:
-            cout << "You chose wavenumbers a.k.a. cm-1\n"; 
-            break;
-        case 1:
-            cout << "You chose electron Volts (ev)\n"; 
-            break;
-        default:
-            cout << "Invalid input\n";
-            break;
-    }
-
-    return (choice);   
 }
