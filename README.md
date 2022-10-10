@@ -8,7 +8,7 @@ An example input file "Bi25FeO39.txt" is provided. An input file with improper d
 
 
 Compilation:
-g++ BoseCorrection.cpp -o bc.exe
+g++ -std=c++11 BoseCorrection.cpp -o bc.exe
 
 
 Execution syntax:
