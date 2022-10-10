@@ -58,7 +58,7 @@ int main(int argc, char** argv)
 
 //Purpose: Reads a space or tab delimited file and converts it to a vector of Data_Point.
 //The file should have two columns: 1) Wavenumbers, 2) Raman intensity.
-vector<Data_Point> readFromFile(string filename) {
+vector<Data_Point> readFromFile(string filename){
     std::vector<Data_Point> data_vector = {}; //Return variable
 
     //Open filestream, check if it opens
@@ -121,7 +121,7 @@ void printDataVector(std::vector<Data_Point> dv){
 //Purpose: Calculate the scaling factor, from the Bose Einstein distribution,
 //necessary to convert from Raman intensity to the imaginary (off-phase) part of the Raman 
 //susceptibility. Wavenumber is the frequency in inverse cm, and temperature is in kelvin. 
-double calcScaleFactor(double wavenumber, double temperature) {
+double calcScaleFactor(double wavenumber, double temperature){
     //Further information on Bose Einstein scaling can be found in:
     //http://dx.doi.org/10.1088/0953-8984/15/19/332
     //https://digitalcommons.unl.edu/cgi/viewcontent.cgi?article=1263&context=chemfacpub
